@@ -4,6 +4,11 @@ android {
   compileSdkVersion 30
   buildToolsVersion "29.0.2"
 
+  packagingOptions {
+    exclude 'META-INF/INDEX.LIST'
+    exclude 'META-INF/DEPENDENCIES'
+  }
+  
   defaultConfig {
     applicationId "com.bae.dialogflowbot"
     minSdkVersion 23
