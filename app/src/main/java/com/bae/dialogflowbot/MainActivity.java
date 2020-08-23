@@ -9,7 +9,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bae.dialogflowbot.adapters.ChatAdapter;
-import com.bae.dialogflowbot.helpers.RequestJavaV2Task;
+import com.bae.dialogflowbot.helpers.SendMessageInBg;
 import com.bae.dialogflowbot.interfaces.BotReply;
 import com.bae.dialogflowbot.models.Message;
 import com.google.api.gax.core.FixedCredentialsProvider;
@@ -36,9 +36,11 @@ public class MainActivity extends AppCompatActivity implements BotReply {
   EditText editMessage;
   ImageButton btnSend;
 
+  //dialogFlow
   private SessionsClient sessionsClient;
-  private SessionName session;
+  private SessionName sessionName;
   private String uuid = UUID.randomUUID().toString();
+  private String TAG = "mainactivity";
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -48,27 +50,21 @@ public class MainActivity extends AppCompatActivity implements BotReply {
     editMessage = findViewById(R.id.editMessage);
     btnSend = findViewById(R.id.btnSend);
 
-    messageList.add(new Message("hello", false));
-    messageList.add(new Message("hey buddy", true));
-    messageList.add(new Message("how are you", false));
-    messageList.add(new Message("I am fine. wbu?", true));
-    messageList.add(new Message("Good. How is health?", false));
-    messageList.add(new Message("Nice yaar.", true));
-    messageList.add(new Message("Good to hear from you", false));
-    messageList.add(new Message("Yeah! you too.", true));
-
     chatAdapter = new ChatAdapter(messageList, this);
     chatView.setAdapter(chatAdapter);
 
     btnSend.setOnClickListener(new View.OnClickListener() {
       @Override public void onClick(View view) {
         String message = editMessage.getText().toString();
-        if (message != null && !message.isEmpty()) {
+        if (!message.isEmpty()) {
+          messageList.add(new Message(message, false));
           editMessage.setText("");
           sendMessageToBot(message);
           Objects.requireNonNull(chatView.getAdapter()).notifyDataSetChanged();
           Objects.requireNonNull(chatView.getLayoutManager())
               .scrollToPosition(messageList.size() - 1);
+        } else {
+          Toast.makeText(MainActivity.this, "Please enter text!", Toast.LENGTH_SHORT).show();
         }
       }
     });
@@ -87,38 +83,33 @@ public class MainActivity extends AppCompatActivity implements BotReply {
       SessionsSettings sessionsSettings = settingsBuilder.setCredentialsProvider(
           FixedCredentialsProvider.create(credentials)).build();
       sessionsClient = SessionsClient.create(sessionsSettings);
+      sessionName = SessionName.of(projectId, uuid);
 
-      Toast.makeText(this, "" +projectId, Toast.LENGTH_SHORT).show();
-      session = SessionName.of(projectId, uuid);
+      Log.d(TAG, "projectId : " + projectId);
     } catch (Exception e) {
-      e.printStackTrace();
-      Log.d("error", "error is : " + e.getMessage());
+      Log.d(TAG, "setUpBot: " + e.getMessage());
     }
   }
 
   private void sendMessageToBot(String message) {
-    if (message.trim().isEmpty()) {
-      Toast.makeText(MainActivity.this, "Please enter your query!", Toast.LENGTH_LONG).show();
-    } else {
-      messageList.add(new Message(message, false));
-      chatAdapter.notifyDataSetChanged();
-      QueryInput queryInput = QueryInput.newBuilder().setText(TextInput.newBuilder().setText(message).setLanguageCode("en-US")).build();
-      new RequestJavaV2Task(MainActivity.this, session, sessionsClient, queryInput).execute();
-    }
+    QueryInput input = QueryInput.newBuilder()
+        .setText(TextInput.newBuilder().setText(message).setLanguageCode("en-US")).build();
+    new SendMessageInBg(this, sessionName, sessionsClient, input).execute();
   }
 
   @Override
-  public void callback(DetectIntentResponse response) {
-    if (response != null) {
-      String botReply = response.getQueryResult().getFulfillmentText();
-      if (!botReply.isEmpty()) {
-        messageList.add(new Message(botReply, true));
-        chatAdapter.notifyDataSetChanged();
-      }  else {
-        Toast.makeText(this, "something went wrong" , Toast.LENGTH_SHORT).show();
-      }
-    } else {
-      Toast.makeText(this, "failed to connect" , Toast.LENGTH_SHORT).show();
-    }
+  public void callback(DetectIntentResponse returnResponse) {
+     if(returnResponse!=null) {
+       String botReply = returnResponse.getQueryResult().getFulfillmentText();
+       if(!botReply.isEmpty()){
+         messageList.add(new Message(botReply, true));
+         chatAdapter.notifyDataSetChanged();
+         Objects.requireNonNull(chatView.getLayoutManager()).scrollToPosition(messageList.size() - 1);
+       }else {
+         Toast.makeText(this, "something went wrong", Toast.LENGTH_SHORT).show();
+       }
+     } else {
+       Toast.makeText(this, "failed to connect!", Toast.LENGTH_SHORT).show();
+     }
   }
 }
